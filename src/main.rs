@@ -1,23 +1,12 @@
 use std::time::{Duration, Instant};
-use eframe::egui::{self, TextureHandle};
+use eframe::{egui::{self, Context, Response, TextureHandle, Rounding, Sense, TextureId, Ui, Layout, Align}};
 use egui::{RichText, Color32, Vec2, Button};
-use eframe::egui::ImageButton;
-
-fn main() -> Result<(), eframe::Error> {
-    let options = eframe::NativeOptions {
-        viewport: egui::ViewportBuilder::default()
-            .with_inner_size([600.0, 600.0])
-            .with_min_inner_size([600.0, 600.0])
-            .with_max_inner_size([600.0, 600.0])
-            .with_transparent(true)
-            .with_title("Ticktoro"),
-        ..Default::default()
-    };
-    eframe::run_native("Ticktoro", options, Box::new(|_cc| Box::<MyApp>::default()))
-}
+use egui_extras::image::load_svg_bytes;
 
 struct MyApp {
-    play_image: Option<TextureHandle>,
+    play_image_bytes: &'static [u8],
+    pause_image_bytes: &'static [u8],
+    stop_image_bytes: &'static [u8],
     status_label: Option<String>,
     left_time_message: String,
     minutes: u64,
@@ -30,7 +19,9 @@ struct MyApp {
 impl Default for MyApp {
     fn default() -> Self {
         Self {
-            play_image: None,
+            play_image_bytes: include_bytes!("../assets/play.svg"),
+            pause_image_bytes: include_bytes!("../assets/pause.svg"),
+            stop_image_bytes: include_bytes!("../assets/stop.svg"),
             status_label: None,
             left_time_message: String::from("0\n0"),
             minutes: 25,
@@ -44,19 +35,6 @@ impl Default for MyApp {
 
 impl eframe::App for MyApp {
     fn update(&mut self, ctx: &egui::Context, _frame: &mut eframe::Frame) {
-        if self.play_image.is_none() {
-            let bytes = include_bytes!("../assets/play.png");
-            let image = image::load_from_memory(bytes).unwrap().to_rgba8();
-            let size = [image.width() as usize, image.height() as usize];
-            let pixels = image.into_vec();
-            let texture = ctx.load_texture(
-                "play_icon",
-                egui::ColorImage::from_rgba_unmultiplied(size, &pixels),
-                Default::default(),
-            );
-            self.play_image = Some(texture);
-        }
-
         let mut background_color: Color32 = if !self.is_paused && !self.end_time.is_none() {
             Color32::from_rgb(255, 243, 242)
         } else if self.is_paused {
@@ -97,14 +75,6 @@ impl eframe::App for MyApp {
                     }
                 }
 
-                // let color = if self.is_paused {
-                //     Color32::from_rgb(0, 0, 255)
-                // } else if !self.is_paused && !self.end_time.is_none() {
-                //     Color32::from_rgb(255, 165, 0)
-                // } else {
-                //     Color32::from_rgb(100, 100, 100)
-                // };
-
                 if let Some(status) = &self.status_label {
                     ui.label(
                         RichText::new(status)
@@ -121,99 +91,133 @@ impl eframe::App for MyApp {
                         .size(100.0)
                 );
 
-                // ui.horizontal(|ui| {
-                //     ui.add_space(85.0);
-                //     ui.group(|ui| {
-                //         ui.add_enabled(
-                //             self.end_time.is_none(),
-                //             Slider::new(&mut self.minutes, 1..=120).text("Minutes")
-                //         );
-                //     });
-                // });
-
-                ui.add_space(40.0);
-
-                if (!self.is_paused && self.end_time.is_none()) {
-                    let start_button: egui::Response = if let Some(texture) = &self.play_image {
-                        let image_size = Vec2::new(20.0, 20.0);
-
-                        ui.add_sized(
-                            Vec2::new(60.0, 50.0),
-                            Button::image((texture.id(), image_size))
-                                .rounding(15.0)
-                                .fill(Color32::from_rgb(255, 124, 124)),
-                        )
-                    } else {
-                        ui.add_sized(
-                            Vec2::new(60.0, 50.0),
-                            Button::new(
-                                RichText::new("Start")
-                                    .size(20.0),
-                            )
-                            .rounding(15.0)
-                            .fill(Color32::from_rgb(255, 124, 124)),
-                        )
-                    };
-
-                    if start_button.hovered() {
-                        ui.ctx().set_cursor_icon(egui::CursorIcon::PointingHand);
-                    }
-
-                    if start_button.clicked() {
-                        self.remaining_secs = self.minutes * 60;
-                        self.end_time = Some(Instant::now());
-                        self.last_tick = Instant::now();
-                        self.is_paused = false;
-                    }
-
-                    println!("Timer: {}", self.remaining_secs);
-
-                } else if !self.end_time.is_none() {
-                        let resume_button = ui.add_sized(
-                            Vec2::new(60.0, 50.0),
-                            Button::new(
-                                RichText::new("Res")
-                                    .size(20.0)
-                            ).rounding(15.0)
-                             .fill(Color32::from_rgb(255,124,124)),
+                ui.columns(2, |columns| {
+                    columns[0].with_layout(Layout::right_to_left(Align::Center), |ui| {
+                        let texture = if !self.is_paused && !self.end_time.is_none() {
+                            load_svg_texture(ctx, self.pause_image_bytes)
+                        } else {
+                            load_svg_texture(ctx, self.play_image_bytes)
+                        };
+                        let size_icon = Vec2::new(20.0, 20.0);
+                        let size_button = Vec2::new(60.0, 50.0);
+        
+                        let play_button = centered_image_button(
+                            ui,
+                            texture.id(),
+                            size_icon,
+                            size_button,
+                            20.0,
+                            Color32::from_rgb(255, 124, 124),
                         );
-                        if resume_button.hovered() {
+        
+                        if play_button.hovered() {
                             ui.ctx().set_cursor_icon(egui::CursorIcon::PointingHand);
                         }
-                        if resume_button.clicked() {
-                            self.is_paused = !self.is_paused;
-                            // При паузе фиксируем last_tick
-                            if !self.is_paused {
+        
+                        if play_button.clicked() {
+                            if self.end_time.is_none() && !self.is_paused {
+                                self.remaining_secs = self.minutes * 60;
+                                self.end_time = Some(Instant::now());
                                 self.last_tick = Instant::now();
+                                self.is_paused = false;
+                            } else {
+                                self.is_paused = !self.is_paused;
+                                // При паузе фиксируем last_tick
+                                if !self.is_paused {
+                                    self.last_tick = Instant::now();
+                                }
                             }
                         }
-
-                        ui.add_space(10.0);
-
-                        let reset_button = ui.add_sized(
-                            Vec2::new(200.0, 40.0),
-                            Button::new(
-                                RichText::new("Reset timer")
-                                    .size(20.0)
-                                    .color(Color32::BLACK)
-                                    .strong(),
-                            ),
-                        );
-                        if reset_button.hovered() {
-                            ui.ctx().set_cursor_icon(egui::CursorIcon::PointingHand);
-                        }
-                        if reset_button.clicked() {
-                            self.remaining_secs = 0;
-                            self.end_time = None;
-                            self.is_paused = false;
-                            self.last_tick = Instant::now();
-                        }
-                }
-
-                ctx.request_repaint();
+                    });
+                        if !self.end_time.is_none() {
+                            columns[1].with_layout(Layout::left_to_right(Align::Center), |ui| {
+                                let stop_texture = load_svg_texture(ctx, self.stop_image_bytes);
+                                let size_stop_icon = Vec2::new(30.0, 30.0);
+                                let size_button = Vec2::new(55.0, 45.0);
+            
+                                let next_stage = centered_image_button(
+                                    ui,
+                                    stop_texture.id(),
+                                    size_stop_icon,
+                                    size_button,
+                                    20.0,
+                                    Color32::from_rgb(255, 124, 124),
+                                );
+            
+                                if next_stage.hovered() {
+                                    ui.ctx().set_cursor_icon(egui::CursorIcon::NotAllowed);
+                                }
+                                // if stop_button.clicked() {
+                                //         self.remaining_secs = 0;
+                                //         self.end_time = None;
+                                //         self.is_paused = false;
+                                //         self.last_tick = Instant::now();
+                                //     }
+                        });
+                    }
+                });
             });
+
+            ctx.request_repaint();
         });
     }
 }
 
+fn main() -> Result<(), eframe::Error> {
+    let options = eframe::NativeOptions {
+        viewport: egui::ViewportBuilder::default()
+            .with_inner_size([600.0, 600.0])
+            .with_min_inner_size([600.0, 600.0])
+            .with_max_inner_size([600.0, 600.0])
+            .with_transparent(true)
+            .with_title("Ticktoro"),
+        ..Default::default()
+    };
+    eframe::run_native("Ticktoro", options, Box::new(|_cc| Box::<MyApp>::default()))
+}
 
+fn load_svg_texture(ctx: &Context, bytes: &[u8]) -> TextureHandle {
+    let svg = load_svg_bytes(bytes).expect("Failed to load SVG");
+    ctx.load_texture("svg", svg, Default::default())
+}
+
+fn centered_image_button(
+    ui: &mut Ui,
+    image_id: TextureId,
+    image_size: Vec2,
+    button_size: Vec2,
+    rounding: f32,
+    bg_color: Color32,
+) -> Response {
+    // Выделяем место под кнопку
+    let (rect, response) = ui.allocate_exact_size(button_size, Sense::click());
+
+    // Рисуем фон кнопки
+    let visuals = if response.hovered() {
+        ui.visuals().widgets.hovered
+    } else if response.clicked() {
+        ui.visuals().widgets.active
+    } else {
+        ui.visuals().widgets.inactive
+    };
+
+    ui.painter().rect(
+        rect,
+        Rounding::same(rounding),
+        bg_color,
+        visuals.bg_stroke,
+    );
+
+    // Центрируем изображение
+    let image_pos = rect.center() - image_size / 2.0;
+    let image_rect = egui::Rect::from_min_size(image_pos, image_size);
+
+    ui.painter().image(
+        image_id,
+        image_rect,
+        egui::Rect::from_min_size([0.0, 0.0].into(), [1.0, 1.0].into()),
+        Color32::WHITE,
+    );
+
+    response
+}
