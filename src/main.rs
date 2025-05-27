@@ -1,6 +1,6 @@
 use std::time::{Duration, Instant};
-use eframe::{egui::{self, Align, CentralPanel, Context, Layout, Response, Rounding, Sense, Stroke, TextureHandle, TextureId, Ui, ViewportBuilder}, Error, NativeOptions};
-use egui::{RichText, Color32, Vec2, TextStyle};
+use eframe::{egui::{self}, Error, NativeOptions };
+use egui::{RichText, Color32, Vec2, TextStyle, Margin, Order, Id, Area, Align, CentralPanel, Context, Frame, LayerId, Layout, Response, Rounding, Sense, Stroke, Align2, TextureHandle, TextureId, Ui, ViewportBuilder};
 use egui_extras::image::load_svg_bytes;
 
 struct MyApp {
@@ -17,6 +17,7 @@ struct MyApp {
     end_time: Option<Instant>,
     is_paused: bool,
     last_tick: Instant,
+    show_settings: bool,
 }
 
 impl Default for MyApp {
@@ -35,25 +36,26 @@ impl Default for MyApp {
             end_time: None,
             is_paused: false,
             last_tick: Instant::now(),
+            show_settings: false,
         }
     }
 }
 
 impl eframe::App for MyApp {
     fn update(&mut self, ctx: &egui::Context, _frame: &mut eframe::Frame) {
-        let is_break = !self.is_paused &&!self.end_time.is_none();
+        let is_break = self.is_paused && !self.end_time.is_none();
 
-        let primary_color = if is_break {
+        let primary_color = if !is_break {
             Color32::from_rgb(255,124,124)
         } else {
             Color32::from_rgb(140,202,255)
         };
-        let second_color = if is_break {
+        let second_color = if !is_break {
             Color32::from_rgb(255,217,217)
         } else {
             Color32::from_rgb(217,238,255)
         };
-        let third_color = if is_break {
+        let third_color = if !is_break {
             Color32::from_rgb(255,243,242)
         } else {
             Color32::from_rgb(242,249,255)
@@ -81,6 +83,8 @@ impl eframe::App for MyApp {
         } else {
             format!("{} \n {}", self.minutes, seconds)
         };
+
+        show_custom_modal(ctx, &mut self.show_settings, third_color);
 
         CentralPanel::default().frame(frame).show(ctx, |ui| {
             ui.vertical_centered(|ui| {
@@ -133,7 +137,7 @@ impl eframe::App for MyApp {
                         let size_icon = Vec2::new(20.0, 20.0);
                         let size_button = Vec2::new(60.0, 50.0);
         
-                        let play_button = centered_image_button(
+                        let settings_button = centered_image_button(
                             ui,
                             texture.id(),
                             size_icon,
@@ -141,6 +145,14 @@ impl eframe::App for MyApp {
                             20.0,
                             second_color,
                         );
+
+                        if settings_button.hovered() {
+                            ui.ctx().set_cursor_icon(egui::CursorIcon::PointingHand);
+                        }
+
+                        if settings_button.clicked() {
+                            self.show_settings =!self.show_settings;
+                        }
                     }
                     // play/pause
                     {
@@ -199,6 +211,7 @@ impl eframe::App for MyApp {
                                 if next_stage.hovered() {
                                     ui.ctx().set_cursor_icon(egui::CursorIcon::PointingHand);
                                 }
+
                                 if next_stage.clicked() {
                                     self.remaining_secs = 0;
                                     self.end_time = None;
@@ -313,4 +326,76 @@ fn badge_ui(
     });
 
     response
+}
+
+fn show_custom_modal(ctx: &egui::Context, is_open: &mut bool, background_color: Color32) {
+    if !*is_open {
+        return;
+    }
+
+    enable_disabled_layer(ctx);
+
+    let screen_rect = ctx.screen_rect();
+    let bg_color = Color32::from_rgba_unmultiplied(0, 0, 0, 128);
+    let painter = ctx.layer_painter(LayerId::new(Order::Background, Id::new("modal_bg")));
+    painter.rect_filled(screen_rect, 0.0, bg_color);
+    let close_icon = include_bytes!("../assets/close.svg");
+    let close_icon_texture = load_svg_texture(ctx, close_icon);
+
+    Area::new("custom_modal_window".into())
+        .order(Order::Foreground) 
+        .movable(false)
+        .anchor(Align2::CENTER_CENTER, egui::vec2(0.0, -100.0))
+        .show(ctx, |ui| {
+            Frame::window(&ctx.style())
+                .fill(background_color)
+                .stroke(Stroke::new(1.5, Color32::WHITE))
+                .rounding(Rounding::same(8.0))
+                .inner_margin(Margin::same(10.0))
+                .show(ui, |ui| {
+                    ui.set_max_width(300.0);
+
+                    ui.horizontal(|ui| {
+                        ui.label(RichText::new("Settings").heading().color(Color32::from_rgb(71, 21, 21)));
+                        ui.with_layout(Layout::right_to_left(Align::Center), |ui| {
+                            let close_button = centered_image_button(
+                                ui,
+                                close_icon_texture.id(),
+                                Vec2::new(15.0, 15.0),
+                                Vec2::new(20.0, 20.0),
+                                20.0,
+                                Color32::WHITE,
+                            );
+
+                                        
+                            if close_button.hovered() {
+                                ui.ctx().set_cursor_icon(egui::CursorIcon::PointingHand);
+                            }
+
+                            if close_button.clicked() {
+                                *is_open = false;
+                            }
+                        });
+                    });
+
+                    ui.add_space(20.0);
+
+                    ui.label("Body settings");
+                });
+        });
+}
+
+fn enable_disabled_layer(ctx: &egui::Context) {
+    let screen_rect = ctx.screen_rect();
+
+    let bg_response = ctx
+        .layer_painter(egui::LayerId::new(egui::Order::Background, egui::Id::new("modal_blocker")))
+        .rect_filled(screen_rect, 0.0, egui::Color32::from_rgba_unmultiplied(0, 0, 0, 128)); 
+
+    let _ = egui::Area::new("modal_input_blocker".into())
+        .order(egui::Order::Middle) 
+        .fixed_pos(screen_rect.left_top())
+        .show(ctx, |ui| {
+            ui.allocate_rect(screen_rect, egui::Sense::click());
+        });
 }
