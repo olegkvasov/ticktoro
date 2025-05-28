@@ -3,9 +3,9 @@ use eframe::{
     Error, NativeOptions,
 };
 use egui::{
-    Align, Align2, Area, CentralPanel, Color32, Context, FontId, Frame, Id, LayerId, Layout,
-    Margin, Order, Response, RichText, Rounding, Sense, Stroke, TextStyle, TextureHandle,
-    TextureId, Ui, Vec2, ViewportBuilder,
+    Align, Align2, Area, CentralPanel, Color32, Context, Frame, Id, LayerId, Layout, Margin, Order,
+    Response, RichText, Rounding, Sense, Stroke, TextStyle, TextureHandle, TextureId, Ui, Vec2,
+    ViewportBuilder,
 };
 use egui_extras::image::load_svg_bytes;
 use std::time::{Duration, Instant};
